@@ -1,16 +1,32 @@
 package main
 
 import (
-	"fmt"
-	"os/exec"
-	"strings"
+	"io"
+	"os"
+
+	Primitive "Go-Image-Shape-Transformer/primitive"
 )
 
 func main() {
-	cmd := exec.Command("primitive", strings.Fields("-i input.jpg -o output.jpg -n 250 -m 6")...)
-	b, err := cmd.CombinedOutput()
+	f, err := os.Open("./inputImages/input.jpg")
+
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(string(b))
+
+	defer f.Close()
+
+	out, err := Primitive.Transform(f, 50)
+
+	if err != nil {
+		panic(err)
+	}
+	os.Remove("out.jpg")
+	outFile, err := os.Create("outPutImages/out-1.jpg")
+
+	if err != nil {
+		panic(err)
+	}
+
+	io.Copy(outFile, out)
 }
