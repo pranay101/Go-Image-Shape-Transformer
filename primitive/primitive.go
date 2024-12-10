@@ -29,8 +29,8 @@ func WithNode(mode Mode) func() []string {
 	}
 }
 
-func Transform(image io.Reader, numShapes int, opts ...func() []string) (io.Reader, error) {
-	in, err := tempfile("in_", "jpg")
+func Transform(image io.Reader, ext string, numShapes int, opts ...func() []string) (io.Reader, error) {
+	in, err := tempfile("in_", ext)
 
 	if err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ func Transform(image io.Reader, numShapes int, opts ...func() []string) (io.Read
 
 	defer os.Remove(in.Name())
 
-	out, err := tempfile("out_", "jpg")
+	out, err := tempfile("out_", ext)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func primitive(inputFile string, outputFile string, shapeCount int, mode Mode) (
 func tempfile(prefix, ext string) (*os.File, error) {
 	in, err := os.CreateTemp("", prefix)
 	if err != nil {
-		return nil, errors.New("primitive: failed to create temporary file.")
+		return nil, errors.New("primitive: failed to create temporary file")
 	}
 
 	defer os.Remove(in.Name())

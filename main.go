@@ -2,31 +2,53 @@ package main
 
 import (
 	"io"
-	"os"
+	"net/http"
+	"path/filepath"
 
 	Primitive "Go-Image-Shape-Transformer/primitive"
+
+	"github.com/labstack/gommon/log"
 )
 
 func main() {
-	f, err := os.Open("./inputImages/input.jpg")
+	mux := http.NewServeMux()
 
-	if err != nil {
-		panic(err)
-	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/index.html")
+	})
 
-	defer f.Close()
+	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		file, header, err := r.FormFile("image")
 
-	out, err := Primitive.Transform(f, 50)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-	if err != nil {
-		panic(err)
-	}
-	os.Remove("out.jpg")
-	outFile, err := os.Create("outPutImages/out-1.jpg")
+		defer file.Close()
 
-	if err != nil {
-		panic(err)
-	}
+		ext := filepath.Ext(header.Filename)[1:]
+		_ = ext
+		out, err := Primitive.Transform(file, ext, 50)
 
-	io.Copy(outFile, out)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+		switch ext {
+		case "jpg":
+			fallthrough
+		case "jpeg":
+			w.Header().Set("Content-Type", "image/jpg")
+		case "png":
+			w.Header().Set("Content-Type", "image/png")
+
+		default:
+			http.Error(w, "Invalid Image Type", http.StatusBadRequest)
+		}
+
+		io.Copy(w, out)
+	})
+
+	log.Fatal(http.ListenAndServe(":8000", mux))
 }
