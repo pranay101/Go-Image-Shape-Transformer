@@ -1,8 +1,11 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 
 	Primitive "Go-Image-Shape-Transformer/primitive"
@@ -28,27 +31,38 @@ func main() {
 		defer file.Close()
 
 		ext := filepath.Ext(header.Filename)[1:]
-		_ = ext
+
 		out, err := Primitive.Transform(file, ext, 50)
 
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		switch ext {
-		case "jpg":
-			fallthrough
-		case "jpeg":
-			w.Header().Set("Content-Type", "image/jpg")
-		case "png":
-			w.Header().Set("Content-Type", "image/png")
-
-		default:
-			http.Error(w, "Invalid Image Type", http.StatusBadRequest)
+		outFile, err := tempfile("", ext)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
-		io.Copy(w, out)
+		defer outFile.Close()
+		io.Copy(outFile, out)
+
+		redirectUrl := fmt.Sprintf("/%s", outFile.Name())
+		http.Redirect(w, r, redirectUrl, http.StatusFound)
+
 	})
 
+	fs := http.FileServer(http.Dir("./img/"))
+	mux.Handle("/img/", http.StripPrefix("/img", fs))
 	log.Fatal(http.ListenAndServe(":8000", mux))
+}
+
+func tempfile(prefix, ext string) (*os.File, error) {
+	in, err := os.CreateTemp("./img", prefix)
+	if err != nil {
+		return nil, errors.New("main: failed to create temporary file")
+	}
+
+	defer os.Remove(in.Name())
+	return os.Create(fmt.Sprintf("%s.%s", in.Name(), ext))
 }
