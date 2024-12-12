@@ -17,7 +17,8 @@ const (
 	ModeTriangle
 	ModeRect
 	ModeEllipse
-	ModeRotateDrect
+	ModeCircle
+	ModeRotatedRect
 	ModeBeziers
 	ModeRotatedEllipse
 	ModePolygon
@@ -30,30 +31,36 @@ func WithNode(mode Mode) func() []string {
 }
 
 func Transform(image io.Reader, ext string, numShapes int, opts ...func() []string) (io.Reader, error) {
+
+	var args []string
+	for _, opt := range opts {
+		args = append(args, opt()...)
+	}
+
 	in, err := tempfile("in_", ext)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.New("primitive: failed to create temporary input file")
 	}
 
 	defer os.Remove(in.Name())
 
 	out, err := tempfile("out_", ext)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("primitive: failed to create temporary output file")
 	}
 
-	defer os.Remove(in.Name())
+	defer os.Remove(out.Name())
 
 	// read image into in file
 	_, err = io.Copy(in, image)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.New("primitive: failed to copy image into temp input file")
 	}
 
 	//  run primitive w/ -i in.Name() -o out.Name()
-	stdCombo, err := primitive(in.Name(), out.Name(), numShapes, ModeCombo)
+	stdCombo, err := primitive(in.Name(), out.Name(), numShapes, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,17 +71,18 @@ func Transform(image io.Reader, ext string, numShapes int, opts ...func() []stri
 	_, err = io.Copy(b, out)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.New("primitive: Failed to copy output file into byte buffer")
 	}
 
 	return b, nil
 
 }
 
-func primitive(inputFile string, outputFile string, shapeCount int, mode Mode) (string, error) {
-	argStr := fmt.Sprintf("-i %s -o %s -n %d -m %d", inputFile, outputFile, shapeCount, mode)
+func primitive(inputFile string, outputFile string, shapeCount int, args ...string) (string, error) {
+	argStr := fmt.Sprintf("-i %s -o %s -n %d", inputFile, outputFile, shapeCount)
+	args = append(strings.Fields(argStr), args...)
 
-	cmd := exec.Command("primitive", strings.Fields(argStr)...)
+	cmd := exec.Command("primitive", args...)
 	b, err := cmd.CombinedOutput()
 
 	return string(b), err

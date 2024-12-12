@@ -32,7 +32,7 @@ func main() {
 
 		ext := filepath.Ext(header.Filename)[1:]
 
-		out, err := Primitive.Transform(file, ext, 50)
+		out, err := Primitive.Transform(file, ext, 33, Primitive.WithNode(Primitive.ModeRotatedRect))
 
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -58,11 +58,12 @@ func main() {
 }
 
 func tempfile(prefix, ext string) (*os.File, error) {
-	in, err := os.CreateTemp("./img", prefix)
+	in, err := os.CreateTemp("./img/", prefix)
 	if err != nil {
 		return nil, errors.New("main: failed to create temporary file")
 	}
 
+	defer in.Close()
 	defer os.Remove(in.Name())
 	return os.Create(fmt.Sprintf("%s.%s", in.Name(), ext))
 }
