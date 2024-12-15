@@ -40,14 +40,25 @@ func main() {
 		}
 
 		mode, err := strconv.Atoi(modeString)
-		_ = mode
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		w.Header().Set("Content-Type", "image/jpg")
-		io.Copy(w, f)
+		nString := r.FormValue("numShapes")
+		if nString == "" {
+			renderNumShapeChoices(w, r, f, ext, Primitive.Mode(mode))
+			return
+		}
+
+		numShapes, err := strconv.Atoi(nString)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		_ = numShapes
+		http.Redirect(w, r, "/img/"+filepath.Base(f.Name()), http.StatusFound)
 
 	})
 
@@ -83,29 +94,65 @@ func main() {
 	mux.Handle("/img/", http.StripPrefix("/img", fs))
 	log.Fatal(http.ListenAndServe(":8000", mux))
 }
+func renderNumShapeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSeeker, ext string, mode Primitive.Mode) {
+	opts := []genOps{
+		{N: 10, M: mode},
+		{N: 50, M: mode},
+		{N: 100, M: mode},
+		{N: 150, M: mode},
+	}
+
+	_ = r
+	imgs, err := genImages(rs, ext, opts...)
+
+	if err != nil {
+		http.Error(w, "Something went Wrong", http.StatusInternalServerError)
+		return
+	}
+
+	html := `<html><body>
+                {{range .}}
+                <a href="/modify/{{.Name}}?mode={{.Mode}}&numShapes={{.NumShapes}}">
+                    <img style="width: 240px;" src="/img/{{.Name}}">
+                </a>
+                {{end}}
+                </body></html>`
+	tpl := template.Must(template.New("").Parse(html))
+
+	type dataStruct struct {
+		Name      string
+		Mode      Primitive.Mode
+		NumShapes int
+	}
+
+	var data []dataStruct
+
+	for i, img := range imgs {
+		data = append(data, dataStruct{
+			Name:      filepath.Base(img),
+			Mode:      opts[i].M,
+			NumShapes: opts[i].N,
+		})
+	}
+
+	err = tpl.Execute(w, data)
+	if err != nil {
+		panic(err)
+	}
+}
 
 func renderModeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSeeker, ext string) {
-	a, err := genImage(rs, ext, 33, Primitive.ModeBeziers)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	opts := []genOps{
+		{N: 10, M: Primitive.ModeBeziers},
+		{N: 10, M: Primitive.ModeEllipse},
+		{N: 10, M: Primitive.ModeRotatedRect},
+		{N: 10, M: Primitive.ModeTriangle},
 	}
-	rs.Seek(0, 0)
-	b, err := genImage(rs, ext, 33, Primitive.ModeCombo)
+
+	imgs, err := genImages(rs, ext, opts...)
+	_ = r
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	rs.Seek(0, 0)
-	c, err := genImage(rs, ext, 33, Primitive.ModeRotatedRect)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	rs.Seek(0, 0)
-	d, err := genImage(rs, ext, 33, Primitive.ModeTriangle)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Something went Wrong", http.StatusInternalServerError)
 		return
 	}
 
@@ -118,19 +165,45 @@ func renderModeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSeeker,
                 </body></html>`
 	tpl := template.Must(template.New("").Parse(html))
 
-	data := []struct {
+	type dataStruct struct {
 		Name string
 		Mode Primitive.Mode
-	}{
-		{Name: filepath.Base(a), Mode: Primitive.ModeCircle},
-		{Name: filepath.Base(b), Mode: Primitive.ModeRect},
-		{Name: filepath.Base(c), Mode: Primitive.ModeEllipse},
-		{Name: filepath.Base(d), Mode: Primitive.ModeTriangle},
 	}
+
+	var data []dataStruct
+
+	for i, img := range imgs {
+		data = append(data, dataStruct{
+			Name: filepath.Base(img),
+			Mode: opts[i].M,
+		})
+	}
+
 	err = tpl.Execute(w, data)
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
+
+}
+
+type genOps struct {
+	N int
+	M Primitive.Mode
+}
+
+func genImages(rs io.ReadSeeker, ext string, opts ...genOps) ([]string, error) {
+	var ret []string
+	for _, opt := range opts {
+		rs.Seek(0, 0)
+		f, err := genImage(rs, ext, opt.N, opt.M)
+		if err != nil {
+			return nil, err
+		}
+
+		ret = append(ret, f)
+	}
+
+	return ret, nil
 }
 
 func genImage(file io.Reader, ext string, numShapes int, mode Primitive.Mode) (string, error) {
