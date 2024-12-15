@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"text/template"
 
 	Primitive "Go-Image-Shape-Transformer/primitive"
 
@@ -21,6 +20,20 @@ func main() {
 		http.ServeFile(w, r, "static/index.html")
 	})
 
+	mux.HandleFunc("/modify/", func(w http.ResponseWriter, r *http.Request) {
+		// imgPath := r.URL.Path[(len("/modify/")):]
+		f, err := os.Open("./img/" + filepath.Base(r.URL.Path))
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "image/jpg")
+		io.Copy(w, f)
+
+	})
+
 	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
 		file, header, err := r.FormFile("image")
 
@@ -31,39 +44,21 @@ func main() {
 
 		defer file.Close()
 		ext := filepath.Ext(header.Filename)[1:]
-		a, err := genImage(file, ext, 33, Primitive.ModeBeziers)
+		onDisk, err := tempfile("", ext)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		file.Seek(0, 0)
-		b, err := genImage(file, ext, 33, Primitive.ModeCombo)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		file.Seek(0, 0)
-		c, err := genImage(file, ext, 33, Primitive.ModeRotatedRect)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		file.Seek(0, 0)
-		d, err := genImage(file, ext, 33, Primitive.ModeTriangle)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Something went Wrong", http.StatusInternalServerError)
 			return
 		}
 
-		html := `<html><body>
-                {{range .}}
-                    <img styles="width: 240; display: inline-block" src="/{{.}}">
-                {{end}}
-                </body></html>`
-		tpl := template.Must(template.New("").Parse(html))
-		tpl.Execute(w, []string{a, b, c, d})
-		redirectUrl := fmt.Sprintf("/%s", a)
-		http.Redirect(w, r, redirectUrl, http.StatusFound)
+		defer onDisk.Close()
+		_, err = io.Copy(onDisk, file)
+
+		if err != nil {
+			http.Error(w, "Something went Wrong", http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/modify/"+onDisk.Name(), http.StatusFound)
 
 	})
 
