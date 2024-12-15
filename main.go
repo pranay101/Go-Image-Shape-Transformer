@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"text/template"
 
 	Primitive "Go-Image-Shape-Transformer/primitive"
 
@@ -24,6 +26,21 @@ func main() {
 		// imgPath := r.URL.Path[(len("/modify/")):]
 		f, err := os.Open("./img/" + filepath.Base(r.URL.Path))
 
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		defer f.Close()
+		ext := filepath.Ext(f.Name())
+		modeString := r.FormValue("mode")
+		if modeString == "" {
+			renderModeChoices(w, r, f, ext)
+			return
+		}
+
+		mode, err := strconv.Atoi(modeString)
+		_ = mode
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -67,6 +84,55 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8000", mux))
 }
 
+func renderModeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSeeker, ext string) {
+	a, err := genImage(rs, ext, 33, Primitive.ModeBeziers)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rs.Seek(0, 0)
+	b, err := genImage(rs, ext, 33, Primitive.ModeCombo)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rs.Seek(0, 0)
+	c, err := genImage(rs, ext, 33, Primitive.ModeRotatedRect)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rs.Seek(0, 0)
+	d, err := genImage(rs, ext, 33, Primitive.ModeTriangle)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	html := `<html><body>
+                {{range .}}
+                <a href="/modify/{{.Name}}?mode={{.Mode}}">
+                    <img style="width: 240px;" src="/img/{{.Name}}">
+                </a>
+                {{end}}
+                </body></html>`
+	tpl := template.Must(template.New("").Parse(html))
+
+	data := []struct {
+		Name string
+		Mode Primitive.Mode
+	}{
+		{Name: filepath.Base(a), Mode: Primitive.ModeCircle},
+		{Name: filepath.Base(b), Mode: Primitive.ModeRect},
+		{Name: filepath.Base(c), Mode: Primitive.ModeEllipse},
+		{Name: filepath.Base(d), Mode: Primitive.ModeTriangle},
+	}
+	err = tpl.Execute(w, data)
+    if err != nil {
+        panic(err)
+    }
+}
+
 func genImage(file io.Reader, ext string, numShapes int, mode Primitive.Mode) (string, error) {
 	out, err := Primitive.Transform(file, ext, numShapes, Primitive.WithNode(mode))
 	if err != nil {
@@ -81,6 +147,7 @@ func genImage(file io.Reader, ext string, numShapes int, mode Primitive.Mode) (s
 	return outFile.Name(), nil
 
 }
+
 func tempfile(prefix, ext string) (*os.File, error) {
 	in, err := os.CreateTemp("./img/", prefix)
 	if err != nil {
