@@ -96,10 +96,10 @@ func main() {
 }
 func renderNumShapeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSeeker, ext string, mode Primitive.Mode) {
 	opts := []genOps{
-		{N: 10, M: mode},
-		{N: 50, M: mode},
-		{N: 100, M: mode},
-		{N: 150, M: mode},
+		{N: 10, M: mode, Label: "10"},
+		{N: 50, M: mode, Label: "50"},
+		{N: 100, M: mode, Label: "100"},
+		{N: 150, M: mode, Label: "150"},
 	}
 
 	_ = r
@@ -115,6 +115,7 @@ func renderNumShapeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSee
                 <a href="/modify/{{.Name}}?mode={{.Mode}}&numShapes={{.NumShapes}}">
                     <img style="width: 240px;" src="/img/{{.Name}}">
                 </a>
+                 <span>{{.Label}}<span>
                 {{end}}
                 </body></html>`
 	tpl := template.Must(template.New("").Parse(html))
@@ -123,6 +124,7 @@ func renderNumShapeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSee
 		Name      string
 		Mode      Primitive.Mode
 		NumShapes int
+		Label     string
 	}
 
 	var data []dataStruct
@@ -132,6 +134,7 @@ func renderNumShapeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSee
 			Name:      filepath.Base(img),
 			Mode:      opts[i].M,
 			NumShapes: opts[i].N,
+			Label:     opts[i].Label,
 		})
 	}
 
@@ -143,10 +146,10 @@ func renderNumShapeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSee
 
 func renderModeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSeeker, ext string) {
 	opts := []genOps{
-		{N: 10, M: Primitive.ModeBeziers},
-		{N: 10, M: Primitive.ModeEllipse},
-		{N: 10, M: Primitive.ModeRotatedRect},
-		{N: 10, M: Primitive.ModeTriangle},
+		{N: 10, M: Primitive.ModeBeziers, Label: "Brezier"},
+		{N: 10, M: Primitive.ModeEllipse, Label: "Ellipse"},
+		{N: 10, M: Primitive.ModeRotatedRect, Label: "Rotated Rectangle"},
+		{N: 10, M: Primitive.ModeTriangle, Label: "Triangle"},
 	}
 
 	imgs, err := genImages(rs, ext, opts...)
@@ -160,22 +163,25 @@ func renderModeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSeeker,
                 {{range .}}
                 <a href="/modify/{{.Name}}?mode={{.Mode}}">
                     <img style="width: 240px;" src="/img/{{.Name}}">
+                    <span>{{.Label}}<span>
                 </a>
                 {{end}}
                 </body></html>`
 	tpl := template.Must(template.New("").Parse(html))
 
 	type dataStruct struct {
-		Name string
-		Mode Primitive.Mode
+		Name  string
+		Mode  Primitive.Mode
+		Label string
 	}
 
 	var data []dataStruct
 
 	for i, img := range imgs {
 		data = append(data, dataStruct{
-			Name: filepath.Base(img),
-			Mode: opts[i].M,
+			Name:  filepath.Base(img),
+			Mode:  opts[i].M,
+			Label: opts[i].Label,
 		})
 	}
 
@@ -187,8 +193,9 @@ func renderModeChoices(w http.ResponseWriter, r *http.Request, rs io.ReadSeeker,
 }
 
 type genOps struct {
-	N int
-	M Primitive.Mode
+	N     int
+	M     Primitive.Mode
+	Label string
 }
 
 func genImages(rs io.ReadSeeker, ext string, opts ...genOps) ([]string, error) {
